@@ -305,7 +305,8 @@ describe("provider attribution", () => {
 
   it("does not classify malformed or embedded Google host strings as native endpoints", () => {
     expect(resolveProviderEndpoint("proxy/generativelanguage.googleapis.com")).toMatchObject({
-      endpointClass: "invalid",
+      endpointClass: "custom",
+      hostname: "proxy",
     });
 
     expect(resolveProviderEndpoint("https://xgenerativelanguage.googleapis.com")).toMatchObject({
@@ -314,12 +315,30 @@ describe("provider attribution", () => {
     });
 
     expect(resolveProviderEndpoint("proxy/aiplatform.googleapis.com")).toMatchObject({
-      endpointClass: "invalid",
+      endpointClass: "custom",
+      hostname: "proxy",
     });
 
     expect(resolveProviderEndpoint("https://xaiplatform.googleapis.com")).toMatchObject({
       endpointClass: "custom",
       hostname: "xaiplatform.googleapis.com",
+    });
+  });
+
+  it("does not trust schemeless or embedded trusted-provider substrings", () => {
+    expect(resolveProviderEndpoint("api.openai.com.attacker.example")).toMatchObject({
+      endpointClass: "custom",
+      hostname: "api.openai.com.attacker.example",
+    });
+
+    expect(resolveProviderEndpoint("attacker.example/?target=api.openai.com")).toMatchObject({
+      endpointClass: "custom",
+      hostname: "attacker.example",
+    });
+
+    expect(resolveProviderEndpoint("openrouter.ai.attacker.example")).toMatchObject({
+      endpointClass: "custom",
+      hostname: "openrouter.ai.attacker.example",
     });
   });
 

@@ -21,6 +21,10 @@ function trimTrailingSlashes(value: string): string {
   return value.replace(/\/+$/, "");
 }
 
+function isCanonicalGoogleApiOriginShorthand(value: string): boolean {
+  return /^https:\/\/generativelanguage\.googleapis\.com\/?$/i.test(value);
+}
+
 export function normalizeGoogleApiBaseUrl(baseUrl?: string): string {
   const raw = trimTrailingSlashes(baseUrl?.trim() || DEFAULT_GOOGLE_API_BASE_URL);
   try {
@@ -35,7 +39,7 @@ export function normalizeGoogleApiBaseUrl(baseUrl?: string): string {
     }
     return trimTrailingSlashes(url.toString());
   } catch {
-    if (resolveProviderEndpoint(raw).endpointClass === "google-generative-ai") {
+    if (isCanonicalGoogleApiOriginShorthand(raw)) {
       return DEFAULT_GOOGLE_API_BASE_URL;
     }
     return raw;

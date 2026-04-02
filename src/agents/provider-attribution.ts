@@ -81,51 +81,32 @@ function formatOpenClawUserAgent(version: string): string {
   return `${OPENCLAW_ATTRIBUTION_ORIGINATOR}/${version}`;
 }
 
+function tryParseHostname(value: string): string | undefined {
+  try {
+    return new URL(value).hostname.toLowerCase();
+  } catch {
+    return undefined;
+  }
+}
+
+function isSchemelessHostnameCandidate(value: string): boolean {
+  return /^[a-z0-9.[\]-]+(?::\d+)?(?:[/?#].*)?$/i.test(value);
+}
+
 function resolveUrlHostname(value: unknown): string | undefined {
   if (typeof value !== "string" || !value.trim()) {
     return undefined;
   }
 
-  try {
-    return new URL(value).hostname.toLowerCase();
-  } catch {
-    const normalized = value.trim().toLowerCase();
-    if (normalized.includes("api.openai.com")) {
-      return "api.openai.com";
-    }
-    if (normalized.includes("chatgpt.com")) {
-      return "chatgpt.com";
-    }
-    if (normalized.includes(".openai.azure.com")) {
-      const suffixStart = normalized.indexOf(".openai.azure.com");
-      const prefix = normalized.slice(0, suffixStart).replace(/^https?:\/\//, "");
-      return `${prefix}.openai.azure.com`;
-    }
-    if (normalized.includes("openrouter.ai")) {
-      return "openrouter.ai";
-    }
-    if (/^(?:https?:\/\/)?generativelanguage\.googleapis\.com(?:[:/?#]|$)/.test(normalized)) {
-      return "generativelanguage.googleapis.com";
-    }
-    if (
-      /^(?:https?:\/\/)?(?:[a-z0-9-]+-)?aiplatform\.googleapis\.com(?:[:/?#]|$)/.test(normalized)
-    ) {
-      const match =
-        /^(?:https?:\/\/)?([a-z0-9-]+-aiplatform\.googleapis\.com|aiplatform\.googleapis\.com)(?:[:/?#]|$)/.exec(
-          normalized,
-        );
-      return match?.[1];
-    }
-    if (
-      normalized.includes("localhost") ||
-      normalized.includes("127.0.0.1") ||
-      normalized.includes("[::1]") ||
-      normalized.includes("://::1")
-    ) {
-      return "localhost";
-    }
+  const trimmed = value.trim();
+  const parsedHostname = tryParseHostname(trimmed);
+  if (parsedHostname) {
+    return parsedHostname;
+  }
+  if (!isSchemelessHostnameCandidate(trimmed)) {
     return undefined;
   }
+  return tryParseHostname(`https://${trimmed}`);
 }
 
 function isLocalEndpointHost(host: string): boolean {
