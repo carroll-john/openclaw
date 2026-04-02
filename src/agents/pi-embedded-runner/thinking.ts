@@ -1,4 +1,5 @@
 import type { AgentMessage, StreamFn } from "@mariozechner/pi-agent-core";
+import { createAssistantMessageEventStream } from "@mariozechner/pi-ai";
 import { log } from "./logger.js";
 
 type AssistantContentBlock = Extract<AgentMessage, { role: "assistant" }>["content"][number];
@@ -230,18 +231,20 @@ function shouldRecoverAnthropicThinkingError(
   return true;
 }
 
-async function* wrapAsyncIterableWithRecovery(
+async function pumpStreamWithRecovery(
+  outer: ReturnType<typeof createAssistantMessageEventStream>,
   stream: ReturnType<StreamFn>,
   sessionMeta: RecoverySessionMeta,
   retry: () => ReturnType<StreamFn>,
-): AsyncGenerator {
+): Promise<unknown> {
   let yieldedChunk = false;
   try {
     const resolved = stream instanceof Promise ? await stream : stream;
     for await (const chunk of resolved as AsyncIterable<unknown>) {
       yieldedChunk = true;
-      yield chunk;
+      outer.push(chunk as Parameters<typeof outer.push>[0]);
     }
+    return await (resolved as { result?: () => Promise<unknown> }).result?.();
   } catch (error: unknown) {
     if (!shouldRecoverAnthropicThinkingError(error, sessionMeta)) {
       throw error;
@@ -259,8 +262,9 @@ async function* wrapAsyncIterableWithRecovery(
     const retryStream = retry();
     const resolvedRetry = retryStream instanceof Promise ? await retryStream : retryStream;
     for await (const chunk of resolvedRetry as AsyncIterable<unknown>) {
-      yield chunk;
+      outer.push(chunk as Parameters<typeof outer.push>[0]);
     }
+    return await (resolvedRetry as { result?: () => Promise<unknown> }).result?.();
   }
 }
 
@@ -295,10 +299,13 @@ export function wrapAnthropicStreamWithRecovery(
         return retry();
       }) as ReturnType<StreamFn>;
     }
-    return wrapAsyncIterableWithRecovery(
-      stream,
-      sessionMeta,
-      retry,
-    ) as unknown as ReturnType<StreamFn>;
+    const outer = createAssistantMessageEventStream();
+    const finalResultPromise = pumpStreamWithRecovery(outer, stream, sessionMeta, retry).finally(
+      () => {
+        outer.end();
+      },
+    );
+    outer.result = () => finalResultPromise;
+    return outer as unknown as ReturnType<StreamFn>;
   };
 }

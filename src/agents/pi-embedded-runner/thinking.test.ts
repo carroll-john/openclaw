@@ -1,4 +1,5 @@
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
+import { createAssistantMessageEventStream } from "@mariozechner/pi-ai";
 import { describe, expect, it } from "vitest";
 import { castAgentMessage, castAgentMessages } from "../test-helpers/agent-message-fixtures.js";
 import {
@@ -229,21 +230,15 @@ describe("wrapAnthropicStreamWithRecovery", () => {
     );
 
     const chunks: unknown[] = [];
-    let caughtError: unknown;
-    try {
-      for await (const chunk of wrapped(
-        {} as never,
-        { messages: [] } as never,
-        {} as never,
-      ) as AsyncIterable<unknown>) {
-        chunks.push(chunk);
-      }
-    } catch (error: unknown) {
-      caughtError = error;
+    const response = wrapped({} as never, { messages: [] } as never, {} as never) as {
+      result: () => Promise<unknown>;
+    } & AsyncIterable<unknown>;
+    for await (const chunk of response) {
+      chunks.push(chunk);
     }
 
     expect(chunks).toEqual(["chunk"]);
-    expect(caughtError).toBe(anthropicThinkingError);
+    await expect(response.result()).rejects.toBe(anthropicThinkingError);
     expect(callCount).toBe(1);
   });
 
@@ -262,5 +257,49 @@ describe("wrapAnthropicStreamWithRecovery", () => {
       rateLimitError,
     );
     expect(callCount).toBe(1);
+  });
+
+  it("preserves result() for synchronous event streams", async () => {
+    const finalMessage = {
+      role: "assistant",
+      content: [{ type: "text", text: "done" }],
+      api: "anthropic-messages",
+      provider: "anthropic",
+      model: "claude-sonnet-4-6",
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+      stopReason: "stop",
+      timestamp: Date.now(),
+    } as const;
+
+    const wrapped = wrapAnthropicStreamWithRecovery(
+      (() => {
+        const stream = createAssistantMessageEventStream();
+        queueMicrotask(() => {
+          stream.push({ type: "start", partial: finalMessage });
+          stream.push({ type: "done", reason: "stop", message: finalMessage });
+          stream.end();
+        });
+        return stream;
+      }) as Parameters<typeof wrapAnthropicStreamWithRecovery>[0],
+      { id: "test-session" },
+    );
+
+    const response = wrapped({} as never, { messages: [] } as never, {} as never) as {
+      result: () => Promise<unknown>;
+    } & AsyncIterable<unknown>;
+    const events: unknown[] = [];
+    for await (const event of response) {
+      events.push(event);
+    }
+
+    await expect(response.result()).resolves.toEqual(finalMessage);
+    expect(events).toHaveLength(2);
   });
 });
