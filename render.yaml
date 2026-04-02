@@ -4,27 +4,18 @@ services:
     runtime: docker
     plan: starter
     healthCheckPath: /health
+    dockerCommand: >-
+      /bin/sh -lc '
+      node dist/index.js config set gateway.mode local >/dev/null &&
+      node dist/index.js config set gateway.bind lan >/dev/null &&
+      node dist/index.js config set gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback true --strict-json >/dev/null &&
+      export OPENCLAW_SKIP_CHANNELS=1 OPENCLAW_SKIP_CRON=1 OPENCLAW_SKIP_CANVAS_HOST=1 OPENCLAW_DISABLE_BONJOUR=1 OPENCLAW_GATEWAY_PORT="${PORT:-10000}" NODE_OPTIONS="--max-old-space-size=384" &&
+      exec node openclaw.mjs gateway --allow-unconfigured --bind lan --port "${PORT:-10000}"'
     envVars:
-      - key: OPENCLAW_GATEWAY_PORT
-        value: "8080"
-      - key: OPENCLAW_GATEWAY_BIND
-        value: lan
-      - key: OPENCLAW_PERSIST_STARTUP_CONFIG
-        value: "1"
-      - key: OPENCLAW_GATEWAY_ALLOW_HOST_HEADER_ORIGIN_FALLBACK
-        value: "1"
       - key: OPENCLAW_STATE_DIR
         value: /data/.openclaw
       - key: OPENCLAW_WORKSPACE_DIR
         value: /data/workspace
-      - key: OPENCLAW_SKIP_CHANNELS
-        value: "1"
-      - key: OPENCLAW_SKIP_CRON
-        value: "1"
-      - key: OPENCLAW_SKIP_CANVAS_HOST
-        value: "1"
-      - key: OPENCLAW_DISABLE_BONJOUR
-        value: "1"
       - key: OPENCLAW_GATEWAY_TOKEN
         generateValue: true
     disk:
