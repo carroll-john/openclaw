@@ -129,7 +129,7 @@ describe("web_fetch SSRF protection", () => {
       redirectResponse("http://127.0.0.1/secret"),
     );
     const tool = await createWebFetchToolForTest({
-      firecrawl: { apiKey: "firecrawl-test" }, // pragma: allowlist secret
+      firecrawlApiKey: "firecrawl-test", // pragma: allowlist secret
     });
 
     await expectBlockedUrl(tool, "https://example.com", /private|internal|blocked/i);

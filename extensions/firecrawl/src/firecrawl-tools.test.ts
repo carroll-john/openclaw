@@ -328,6 +328,21 @@ describe("firecrawl tools", () => {
     expect(resolveFirecrawlBaseUrl({} as OpenClawConfig)).not.toBe(DEFAULT_FIRECRAWL_BASE_URL);
   });
 
+  it("only allows the official Firecrawl API host for fetch endpoints", () => {
+    expect(firecrawlClientTesting.resolveEndpoint("https://api.firecrawl.dev", "/v2/scrape")).toBe(
+      "https://api.firecrawl.dev/v2/scrape",
+    );
+    expect(() =>
+      firecrawlClientTesting.resolveEndpoint("http://api.firecrawl.dev", "/v2/scrape"),
+    ).toThrow("Firecrawl baseUrl must use https.");
+    expect(() =>
+      firecrawlClientTesting.resolveEndpoint("https://127.0.0.1:8787", "/v2/scrape"),
+    ).toThrow("Firecrawl baseUrl host is not allowed");
+    expect(() =>
+      firecrawlClientTesting.resolveEndpoint("https://attacker.example", "/v2/search"),
+    ).toThrow("Firecrawl baseUrl host is not allowed");
+  });
+
   it("respects positive numeric overrides for scrape and cache behavior", () => {
     const cfg = {
       tools: {

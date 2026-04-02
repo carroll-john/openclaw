@@ -1,6 +1,5 @@
 import type { OpenClawConfig } from "../config/config.js";
 import { resolveSecretInputRef } from "../config/types.secrets.js";
-import { listBundledWebFetchPluginIds } from "../plugins/bundled-web-fetch-ids.js";
 import { resolveBundledWebFetchPluginId } from "../plugins/bundled-web-fetch-provider-ids.js";
 import { listBundledWebSearchPluginIds } from "../plugins/bundled-web-search-ids.js";
 import { resolveBundledWebSearchPluginId } from "../plugins/bundled-web-search-provider-ids.js";
@@ -11,7 +10,6 @@ import type {
   WebSearchCredentialResolutionSource,
 } from "../plugins/types.js";
 import { resolveBundledPluginWebFetchProviders } from "../plugins/web-fetch-providers.js";
-import { resolvePluginWebFetchProviders } from "../plugins/web-fetch-providers.runtime.js";
 import { sortWebFetchProvidersForAutoDetect } from "../plugins/web-fetch-providers.shared.js";
 import { resolveBundledPluginWebSearchProviders } from "../plugins/web-search-providers.js";
 import { resolvePluginWebSearchProviders } from "../plugins/web-search-providers.runtime.js";
@@ -81,7 +79,7 @@ function normalizeProvider(
 
 function normalizeFetchProvider(
   value: unknown,
-  providers: ReturnType<typeof resolvePluginWebFetchProviders>,
+  providers: PluginWebFetchProviderEntry[],
 ): WebFetchProvider | undefined {
   if (typeof value !== "string") {
     return undefined;
@@ -106,33 +104,6 @@ function hasCustomWebSearchPluginRisk(config: OpenClawConfig): boolean {
   }
 
   const bundledPluginIds = new Set<string>(listBundledWebSearchPluginIds());
-  const hasNonBundledPluginId = (pluginId: string) => !bundledPluginIds.has(pluginId.trim());
-  if (Array.isArray(plugins.allow) && plugins.allow.some(hasNonBundledPluginId)) {
-    return true;
-  }
-  if (Array.isArray(plugins.deny) && plugins.deny.some(hasNonBundledPluginId)) {
-    return true;
-  }
-  if (plugins.entries && Object.keys(plugins.entries).some(hasNonBundledPluginId)) {
-    return true;
-  }
-
-  return false;
-}
-
-function hasCustomWebFetchPluginRisk(config: OpenClawConfig): boolean {
-  const plugins = config.plugins;
-  if (!plugins) {
-    return false;
-  }
-  if (Array.isArray(plugins.load?.paths) && plugins.load.paths.length > 0) {
-    return true;
-  }
-  if (plugins.installs && Object.keys(plugins.installs).length > 0) {
-    return true;
-  }
-
-  const bundledPluginIds = new Set<string>(listBundledWebFetchPluginIds());
   const hasNonBundledPluginId = (pluginId: string) => !bundledPluginIds.has(pluginId.trim());
   if (Array.isArray(plugins.allow) && plugins.allow.some(hasNonBundledPluginId)) {
     return true;
@@ -794,17 +765,11 @@ export async function resolveRuntimeWebTools(params: {
             bundledAllowlistCompat: true,
             onlyPluginIds: [configuredBundledFetchPluginId],
           })
-        : !hasCustomWebFetchPluginRisk(params.sourceConfig)
-          ? resolveBundledPluginWebFetchProviders({
-              config: params.sourceConfig,
-              env: { ...process.env, ...params.context.env },
-              bundledAllowlistCompat: true,
-            })
-          : resolvePluginWebFetchProviders({
-              config: params.sourceConfig,
-              env: { ...process.env, ...params.context.env },
-              bundledAllowlistCompat: true,
-            })
+        : resolveBundledPluginWebFetchProviders({
+            config: params.sourceConfig,
+            env: { ...process.env, ...params.context.env },
+            bundledAllowlistCompat: true,
+          })
       : [],
   );
   const configuredFetchProvider = normalizeFetchProvider(rawFetchProvider, fetchProviders);

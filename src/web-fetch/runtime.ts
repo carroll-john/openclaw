@@ -47,16 +47,6 @@ export function resolveWebFetchEnabled(params: {
   return true;
 }
 
-function readProviderEnvValue(envVars: string[]): string | undefined {
-  for (const envVar of envVars) {
-    const value = normalizeSecretInput(process.env[envVar]);
-    if (value) {
-      return value;
-    }
-  }
-  return undefined;
-}
-
 function providerRequiresCredential(
   provider: Pick<PluginWebFetchProviderEntry, "requiresCredential">,
 ): boolean {
@@ -82,13 +72,7 @@ function hasEntryCredential(
   if (configuredRef && configuredRef.source !== "env") {
     return true;
   }
-  const fromConfig = normalizeSecretInput(normalizeSecretInputString(rawValue));
-  if (configuredRef?.source === "env") {
-    return Boolean(
-      normalizeSecretInput(process.env[configuredRef.id]) || readProviderEnvValue(provider.envVars),
-    );
-  }
-  return Boolean(fromConfig || readProviderEnvValue(provider.envVars));
+  return Boolean(normalizeSecretInput(normalizeSecretInputString(rawValue)));
 }
 
 export function listWebFetchProviders(params?: {
@@ -164,12 +148,12 @@ export function resolveWebFetchDefinition(
   }
 
   const providers = sortWebFetchProvidersForAutoDetect(
-    options?.preferRuntimeProviders
-      ? resolveRuntimeWebFetchProviders({
+    options?.sandboxed === true || !options?.preferRuntimeProviders
+      ? resolveBundledPluginWebFetchProviders({
           config: options?.config,
           bundledAllowlistCompat: true,
         })
-      : resolveBundledPluginWebFetchProviders({
+      : resolveRuntimeWebFetchProviders({
           config: options?.config,
           bundledAllowlistCompat: true,
         }),

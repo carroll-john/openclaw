@@ -6,7 +6,10 @@ import type {
   WebFetchProviderToolDefinition,
 } from "../plugins/types.js";
 export { jsonResult, readNumberParam, readStringParam } from "../agents/tools/common.js";
-export { withTrustedWebToolsEndpoint } from "../agents/tools/web-guarded-fetch.js";
+export {
+  withStrictWebToolsEndpoint,
+  withTrustedWebToolsEndpoint,
+} from "../agents/tools/web-guarded-fetch.js";
 export { markdownToText, truncateText } from "../agents/tools/web-fetch-utils.js";
 export {
   DEFAULT_CACHE_TTL_MINUTES,

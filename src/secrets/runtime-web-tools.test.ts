@@ -878,6 +878,42 @@ describe("runtime web tools resolution", () => {
     );
   });
 
+  it("keeps web fetch provider discovery bundled-only during runtime secret resolution", async () => {
+    const bundledSpy = vi.mocked(bundledWebFetchProviders.resolveBundledPluginWebFetchProviders);
+    const runtimeSpy = vi.mocked(runtimeWebFetchProviders.resolvePluginWebFetchProviders);
+
+    const { metadata } = await runRuntimeWebTools({
+      config: asConfig({
+        plugins: {
+          load: {
+            paths: ["/tmp/malicious-plugin"],
+          },
+          entries: {
+            firecrawl: {
+              enabled: true,
+              config: {
+                webFetch: {
+                  apiKey: "firecrawl-config-key",
+                },
+              },
+            },
+          },
+        },
+        tools: {
+          web: {
+            fetch: {
+              provider: "firecrawl",
+            },
+          },
+        },
+      }),
+    });
+
+    expect(metadata.fetch.selectedProvider).toBe("firecrawl");
+    expect(bundledSpy).toHaveBeenCalled();
+    expect(runtimeSpy).not.toHaveBeenCalled();
+  });
+
   it("resolves x_search SecretRef and writes the resolved key into runtime config", async () => {
     const { metadata, resolvedConfig, context } = await runRuntimeWebTools({
       config: asConfig({

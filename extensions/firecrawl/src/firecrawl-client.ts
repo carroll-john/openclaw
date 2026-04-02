@@ -6,10 +6,9 @@ import {
   readCache,
   resolveCacheTtlMs,
   truncateText,
-  withTrustedWebToolsEndpoint,
+  withStrictWebToolsEndpoint,
   writeCache,
 } from "openclaw/plugin-sdk/provider-web-fetch";
-import { postTrustedWebToolsJson } from "openclaw/plugin-sdk/provider-web-search";
 import { wrapExternalContent, wrapWebContent } from "openclaw/plugin-sdk/security-runtime";
 import {
   resolveFirecrawlApiKey,
@@ -30,6 +29,7 @@ const SCRAPE_CACHE = new Map<
 >();
 const DEFAULT_SEARCH_COUNT = 5;
 const DEFAULT_SCRAPE_MAX_CHARS = 50_000;
+const ALLOWED_FIRECRAWL_HOSTS = new Set(["api.firecrawl.dev"]);
 
 type FirecrawlSearchItem = {
   title: string;
@@ -63,20 +63,63 @@ export type FirecrawlScrapeParams = {
 };
 
 function resolveEndpoint(baseUrl: string, pathname: "/v2/search" | "/v2/scrape"): string {
-  const trimmed = baseUrl.trim();
-  if (!trimmed) {
-    return new URL(pathname, "https://api.firecrawl.dev").toString();
+  const url = new URL(baseUrl.trim() || "https://api.firecrawl.dev");
+  if (url.protocol !== "https:") {
+    throw new Error("Firecrawl baseUrl must use https.");
   }
-  try {
-    const url = new URL(trimmed);
-    if (url.pathname && url.pathname !== "/") {
-      return url.toString();
-    }
-    url.pathname = pathname;
-    return url.toString();
-  } catch {
-    return new URL(pathname, "https://api.firecrawl.dev").toString();
+  if (!ALLOWED_FIRECRAWL_HOSTS.has(url.hostname)) {
+    throw new Error(`Firecrawl baseUrl host is not allowed: ${url.hostname}`);
   }
+  url.username = "";
+  url.password = "";
+  url.search = "";
+  url.hash = "";
+  url.pathname = pathname;
+  return url.toString();
+}
+
+async function postFirecrawlJson<T>(
+  params: {
+    url: string;
+    timeoutSeconds: number;
+    apiKey: string;
+    body: Record<string, unknown>;
+    errorLabel: string;
+  },
+  parse: (response: Response) => Promise<T>,
+): Promise<T> {
+  return await withStrictWebToolsEndpoint(
+    {
+      url: params.url,
+      timeoutSeconds: params.timeoutSeconds,
+      init: {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${params.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(params.body),
+      },
+    },
+    async ({ response }) => {
+      if (!response.ok) {
+        let detail = response.statusText;
+        try {
+          const payload = (await response.json()) as Record<string, unknown>;
+          detail =
+            typeof payload.error === "string"
+              ? payload.error
+              : typeof payload.message === "string"
+                ? payload.message
+                : detail;
+        } catch {
+          // Keep the HTTP status text when the response is not JSON.
+        }
+        throw new Error(`${params.errorLabel} API error (${response.status}): ${detail}`);
+      }
+      return await parse(response);
+    },
+  );
 }
 
 function resolveSiteName(urlRaw: string): string | undefined {
@@ -234,7 +277,7 @@ export async function runFirecrawlSearch(
   }
 
   const start = Date.now();
-  const payload = await postTrustedWebToolsJson(
+  const payload = await postFirecrawlJson(
     {
       url: resolveEndpoint(baseUrl, "/v2/search"),
       timeoutSeconds,
@@ -378,30 +421,25 @@ export async function runFirecrawlScrape(
     return { ...cached.value, cached: true };
   }
 
-  const payload = await withTrustedWebToolsEndpoint(
+  const payload = await postFirecrawlJson(
     {
       url: resolveEndpoint(baseUrl, "/v2/scrape"),
       timeoutSeconds,
-      init: {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          url: params.url,
-          formats: ["markdown"],
-          onlyMainContent,
-          timeout: timeoutSeconds * 1000,
-          maxAge: maxAgeMs,
-          proxy,
-          storeInCache,
-        }),
+      apiKey,
+      errorLabel: "Firecrawl",
+      body: {
+        url: params.url,
+        formats: ["markdown"],
+        onlyMainContent,
+        timeout: timeoutSeconds * 1000,
+        maxAge: maxAgeMs,
+        proxy,
+        storeInCache,
       },
     },
-    async ({ response }) => {
+    async (response) => {
       const payload = (await response.json()) as Record<string, unknown>;
-      if (!response.ok || payload.success === false) {
+      if (payload.success === false) {
         const detail =
           typeof payload.error === "string"
             ? payload.error
@@ -432,5 +470,6 @@ export async function runFirecrawlScrape(
 
 export const __testing = {
   parseFirecrawlScrapePayload,
+  resolveEndpoint,
   resolveSearchItems,
 };

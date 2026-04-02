@@ -247,19 +247,91 @@ type WebFetchRuntimeParams = {
   providerFallback: ReturnType<typeof resolveWebFetchDefinition>;
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizeProviderWebFetchPayload(params: {
+  providerId: string;
+  payload: unknown;
+  requestedUrl: string;
+  extractMode: ExtractMode;
+  maxChars: number;
+  tookMs: number;
+}): Record<string, unknown> {
+  const payload = isRecord(params.payload) ? params.payload : {};
+  const rawText = typeof payload.text === "string" ? payload.text : "";
+  const wrapped = wrapWebFetchContent(rawText, params.maxChars);
+  const url = typeof payload.url === "string" && payload.url ? payload.url : params.requestedUrl;
+  const finalUrl =
+    typeof payload.finalUrl === "string" && payload.finalUrl ? payload.finalUrl : url;
+  const status =
+    typeof payload.status === "number" && Number.isFinite(payload.status)
+      ? Math.max(0, Math.floor(payload.status))
+      : 200;
+  const contentType =
+    typeof payload.contentType === "string" ? normalizeContentType(payload.contentType) : undefined;
+  const title = typeof payload.title === "string" ? wrapWebFetchField(payload.title) : undefined;
+  const warning =
+    typeof payload.warning === "string" ? wrapWebFetchField(payload.warning) : undefined;
+  const extractor =
+    typeof payload.extractor === "string" && payload.extractor.trim()
+      ? payload.extractor
+      : params.providerId;
+
+  return {
+    url,
+    finalUrl,
+    ...(contentType ? { contentType } : {}),
+    status,
+    ...(title ? { title } : {}),
+    extractMode: params.extractMode,
+    extractor,
+    externalContent: {
+      untrusted: true,
+      source: "web_fetch",
+      wrapped: true,
+      provider: params.providerId,
+    },
+    truncated: wrapped.truncated,
+    length: wrapped.wrappedLength,
+    rawLength: wrapped.rawLength,
+    wrappedLength: wrapped.wrappedLength,
+    fetchedAt:
+      typeof payload.fetchedAt === "string" && payload.fetchedAt
+        ? payload.fetchedAt
+        : new Date().toISOString(),
+    tookMs:
+      typeof payload.tookMs === "number" && Number.isFinite(payload.tookMs)
+        ? Math.max(0, Math.floor(payload.tookMs))
+        : params.tookMs,
+    text: wrapped.text,
+    ...(warning ? { warning } : {}),
+  };
+}
+
 async function maybeFetchProviderWebFetchPayload(
   params: WebFetchRuntimeParams & {
     urlToFetch: string;
     cacheKey: string;
+    tookMs: number;
   },
 ): Promise<Record<string, unknown> | null> {
   if (!params.providerFallback) {
     return null;
   }
-  const payload = await params.providerFallback.definition.execute({
+  const rawPayload = await params.providerFallback.definition.execute({
     url: params.urlToFetch,
     extractMode: params.extractMode,
     maxChars: params.maxChars,
+  });
+  const payload = normalizeProviderWebFetchPayload({
+    providerId: params.providerFallback.provider.id,
+    payload: rawPayload,
+    requestedUrl: params.url,
+    extractMode: params.extractMode,
+    maxChars: params.maxChars,
+    tookMs: params.tookMs,
   });
   writeCache(FETCH_CACHE, params.cacheKey, payload, params.cacheTtlMs);
   return payload;
@@ -320,6 +392,7 @@ async function runWebFetch(params: WebFetchRuntimeParams): Promise<Record<string
       ...params,
       urlToFetch: finalUrl,
       cacheKey,
+      tookMs: Date.now() - start,
     });
     if (payload) {
       return payload;
@@ -333,6 +406,7 @@ async function runWebFetch(params: WebFetchRuntimeParams): Promise<Record<string
         ...params,
         urlToFetch: params.url,
         cacheKey,
+        tookMs: Date.now() - start,
       });
       if (payload) {
         return payload;
@@ -383,6 +457,7 @@ async function runWebFetch(params: WebFetchRuntimeParams): Promise<Record<string
               ...params,
               urlToFetch: finalUrl,
               cacheKey,
+              tookMs: Date.now() - start,
             });
           } catch {
             payload = null;
@@ -410,6 +485,7 @@ async function runWebFetch(params: WebFetchRuntimeParams): Promise<Record<string
           ...params,
           urlToFetch: finalUrl,
           cacheKey,
+          tookMs: Date.now() - start,
         });
         if (payload) {
           return payload;

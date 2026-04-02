@@ -2,6 +2,7 @@ import type { OpenClawConfig } from "./config.js";
 import { mergeMissing } from "./legacy.shared.js";
 
 type JsonRecord = Record<string, unknown>;
+const DANGEROUS_RECORD_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 
 function isRecord(value: unknown): value is JsonRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -133,6 +134,9 @@ function normalizeLegacyWebFetchConfigRecord<T extends JsonRecord>(
   const nextFetch: JsonRecord = {};
   for (const [key, value] of Object.entries(fetch)) {
     if (key === "firecrawl" && isRecord(value)) {
+      continue;
+    }
+    if (DANGEROUS_RECORD_KEYS.has(key)) {
       continue;
     }
     nextFetch[key] = value;
