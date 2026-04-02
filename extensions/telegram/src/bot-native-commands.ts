@@ -113,9 +113,11 @@ async function loadTelegramNativeCommandDeliveryRuntime() {
   return await telegramNativeCommandDeliveryRuntimePromise;
 }
 
-function shouldUseTelegramProgressPlaceholder(commandBody: string): boolean {
-  const normalized = commandBody.trim().replace(/\s+/g, " ").toLowerCase();
-  return normalized === "/lossless doctor apply" || normalized === "/lcm doctor apply";
+function resolveTelegramProgressPlaceholder(command: {
+  telegramNativeProgressMessage?: string;
+}): string | null {
+  const text = command.telegramNativeProgressMessage?.trim();
+  return text ? text : null;
 }
 
 function isEditableTelegramProgressResult(result: ReplyPayload): boolean {
@@ -967,8 +969,9 @@ export const registerTelegramNativeCommands = ({
         const to = `telegram:${chatId}`;
         const { deliverReplies } = await loadTelegramNativeCommandDeliveryRuntime();
         let progressMessageId: number | undefined;
+        const progressPlaceholder = resolveTelegramProgressPlaceholder(match.command);
 
-        if (shouldUseTelegramProgressPlaceholder(commandBody)) {
+        if (progressPlaceholder) {
           try {
             const sent = await withTelegramApiErrorLogging({
               operation: "sendMessage",
@@ -976,7 +979,7 @@ export const registerTelegramNativeCommands = ({
               fn: () =>
                 bot.api.sendMessage(
                   chatId,
-                  `Running \`${commandBody}\`...\n\nI'll edit this message with the final result when it's ready.`,
+                  progressPlaceholder,
                   buildTelegramThreadParams(threadSpec),
                 ),
             });
