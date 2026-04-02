@@ -1014,18 +1014,26 @@ export const registerTelegramNativeCommands = ({
             payload: result,
           })
         ) {
+          const progressResultText =
+            typeof result.text === "string" && result.text.trim().length > 0 ? result.text : null;
           if (
             progressMessageId != null &&
             telegramDeps.editMessageTelegram &&
+            progressResultText &&
             isEditableTelegramProgressResult(result)
           ) {
             try {
-              await telegramDeps.editMessageTelegram(chatId, progressMessageId, result.text, {
-                cfg: runtimeCfg,
-                accountId: route.accountId,
-                textMode: "markdown",
-                linkPreview: runtimeTelegramCfg.linkPreview,
-              });
+              await telegramDeps.editMessageTelegram(
+                chatId,
+                progressMessageId,
+                progressResultText,
+                {
+                  cfg: runtimeCfg,
+                  accountId: route.accountId,
+                  textMode: "markdown",
+                  linkPreview: runtimeTelegramCfg.linkPreview,
+                },
+              );
               return;
             } catch {
               // Fall through to a normal delivered reply if editing fails.
