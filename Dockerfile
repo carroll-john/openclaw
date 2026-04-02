@@ -261,4 +261,4 @@ USER node
 # For external access from host/ingress, override bind to "lan" and set auth.
 HEALTHCHECK --interval=3m --timeout=10s --start-period=15s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:18789/healthz').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
-CMD ["node", "openclaw.mjs", "gateway", "--allow-unconfigured"]
+CMD ["sh", "-lc", "if [ \"${OPENCLAW_PERSIST_STARTUP_CONFIG:-0}\" = \"1\" ]; then node dist/index.js config set gateway.mode local >/dev/null && node dist/index.js config set gateway.bind \"${OPENCLAW_GATEWAY_BIND:-loopback}\" >/dev/null; if [ \"${OPENCLAW_GATEWAY_ALLOW_HOST_HEADER_ORIGIN_FALLBACK:-0}\" = \"1\" ]; then node dist/index.js config set gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback true --strict-json >/dev/null; fi; fi; exec node openclaw.mjs gateway --allow-unconfigured --bind \"${OPENCLAW_GATEWAY_BIND:-loopback}\" --port \"${OPENCLAW_GATEWAY_PORT:-18789}\""]
